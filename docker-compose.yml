@@ -1,0 +1,18 @@
+# 本地开发依赖：MongoDB + Redis（默认无密码，勿直接暴露到公网）
+services:
+  mongo:
+    image: mongo:5.0
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - chatserver_mongo:/data/db
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+volumes:
+  chatserver_mongo:

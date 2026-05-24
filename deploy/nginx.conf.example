@@ -1,0 +1,55 @@
+worker_processes auto;
+# 用法：可与仓库内 deploy/nginx.conf 对照；自定义域名时复制本文件为 nginx.conf 并修改 server_name。
+# 或将 chat-web/dist 放到 root，并把 upstream 换成云主机上的 127.0.0.1。
+#
+# HTTPS：建议在主机上用 certbot 申请证书，再 listen 443 ssl 并粘贴证书路径。
+
+events {
+    worker_connections 1024;
+}
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+    sendfile      on;
+    gzip          on;
+    gzip_types    text/plain application/json application/javascript text/css;
+
+    server {
+        listen 80;
+        server_name _;
+
+        root /usr/share/nginx/html;
+        index index.html;
+
+        # Vue SPA
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+
+        # Spring Boot（context-path /chat）
+        location /chat/ {
+            proxy_pass http://chatserver:5555/chat/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_connect_timeout 60s;
+            proxy_read_timeout 60s;
+        }
+
+        # Socket.IO（netty-socketio 独立端口）
+        location /socket.io/ {
+            proxy_pass http://chatserver:9999/socket.io/;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_read_timeout 86400s;
+            proxy_send_timeout 86400s;
+        }
+    }
+}

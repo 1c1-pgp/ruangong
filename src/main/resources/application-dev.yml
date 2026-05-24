@@ -1,0 +1,41 @@
+# 本地开发：先执行 docker compose up -d，或使用环境变量指向你自己的 MongoDB / Redis。
+# 切勿把真实密码提交到仓库；可用 application-local.yml（已加入 .gitignore）覆盖本文件。
+spring:
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/chatdb}
+    redis:
+      repositories:
+        enabled: false
+  redis:
+    database: ${REDIS_DATABASE:0}
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    ssl: ${REDIS_SSL:false}
+    timeout: 6000ms
+
+logging:
+  level:
+    org.springframework.data.mongodb.core: INFO
+    io.lettuce.core: WARN
+
+socketio:
+  enabled: ${SOCKETIO_ENABLED:true}
+  port: ${SOCKETIO_PORT:9999}
+  workCount: 100
+  allowCustomRequests: true
+  upgradeTimeout: 10000
+  pingTimeout: 60000
+  pingInterval: 25000
+  maxHttpContentLength: 1048576
+  maxFramePayloadLength: 1048576
+
+server:
+  servlet:
+    context-path: /chat
+  port: ${SERVER_PORT:5555}
+
+fastdfs:
+  nginx:
+    host: ${FASTDFS_NGINX_HOST:127.0.0.1}

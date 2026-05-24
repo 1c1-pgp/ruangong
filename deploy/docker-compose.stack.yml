@@ -1,0 +1,57 @@
+# 单机一键演示栈：Mongo + Redis + 后端 JAR + Nginx（托管前端静态文件）
+#
+# 前置：在项目根目录执行
+#   cd chat-web && npm ci && npm run build
+# 然后：
+#   cd deploy
+#   export JWT_SECRET="至少32位的随机字符串"
+#   docker compose -f docker-compose.stack.yml up -d
+#
+# 浏览器访问：http://服务器公网IP （默认 80 端口）
+#
+# 正式对外建议：域名解析到该 IP + HTTPS（certbot）+ 修改 server_name
+
+services:
+  mongo:
+    image: mongo:5.0
+    restart: unless-stopped
+    volumes:
+      - chatserver_mongo_data:/data/db
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  chatserver:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      MONGODB_URI: mongodb://mongo:27017/chatdb
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_SSL: "false"
+      JWT_SECRET: ${JWT_SECRET:?请在环境中设置 JWT_SECRET}
+      SOCKETIO_ENABLED: "true"
+      SOCKETIO_PORT: "9999"
+      SERVER_PORT: "5555"
+      FASTDFS_NGINX_HOST: ${FASTDFS_NGINX_HOST:-127.0.0.1}
+    depends_on:
+      - mongo
+      - redis
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../chat-web/dist:/usr/share/nginx/html:ro
+    depends_on:
+      - chatserver
+
+volumes:
+  chatserver_mongo_data:

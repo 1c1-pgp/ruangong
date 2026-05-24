@@ -1,0 +1,30 @@
+spring:
+  profiles:
+    active: dev
+
+# 逗号分隔，示例：https://yourdomain.com,https://www.yourdomain.com
+# 云端前后端同域部署时可保持默认，不影响访问。
+app:
+  cors:
+    allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*}
+
+logging:
+  config: classpath:logback-spring-${spring.profiles.active}.xml
+
+# HS256：生产环境务必通过环境变量 JWT_SECRET 注入足够长的随机串（建议 ≥32 字节）
+jwt:
+  secret: ${JWT_SECRET:dev-only-change-me-use-env-in-production}
+  expire-millis: ${JWT_EXPIRE_MILLIS:86400000}
+
+management:
+  server:
+    port: ${MANAGEMENT_PORT:9555}
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized

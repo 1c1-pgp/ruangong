@@ -1,0 +1,36 @@
+# 生产部署：至少设置 MONGODB_URI、REDIS 相关变量与 JWT_SECRET；不要将明文密码写入仓库。
+spring:
+  data:
+    mongodb:
+      uri: ${MONGODB_URI}
+    redis:
+      repositories:
+        enabled: false
+  redis:
+    database: ${REDIS_DATABASE:0}
+    host: ${REDIS_HOST:127.0.0.1}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    ssl: ${REDIS_SSL:false}
+
+socketio:
+  enabled: ${SOCKETIO_ENABLED:true}
+  port: ${SOCKETIO_PORT:9999}
+  workCount: 100
+  allowCustomRequests: true
+  upgradeTimeout: 10000
+  pingTimeout: 60000
+  pingInterval: 25000
+  maxHttpContentLength: 1048576
+  maxFramePayloadLength: 1048576
+
+server:
+  servlet:
+    context-path: /chat
+  port: ${SERVER_PORT:5555}
+  # 经 Nginx / 负载均衡转发 HTTPS 时，正确识别外部协议与域名
+  forward-headers-strategy: framework
+
+fastdfs:
+  nginx:
+    host: ${FASTDFS_NGINX_HOST:127.0.0.1}

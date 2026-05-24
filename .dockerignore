@@ -1,0 +1,7 @@
+target
+.git
+.idea
+chat-web/node_modules
+chat-web/dist
+*.md
+deploy/*.md
