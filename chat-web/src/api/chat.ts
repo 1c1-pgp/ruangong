@@ -21,6 +21,10 @@ export interface ChatMessage {
   messageType?: string
   fileRawName?: string
   isReadUser?: string[]
+  deletedFor?: string[]
+  revoked?: boolean
+  revokerId?: string
+  revokedAt?: string
 }
 
 export interface GroupItem {
@@ -66,12 +70,54 @@ export async function loadFriends(userId: string): Promise<FriendItem[]> {
   return Array.isArray(list) ? (list as FriendItem[]) : []
 }
 
-export async function loadRecentMessages(roomId: string, pageIndex = 0, pageSize = 50): Promise<ChatMessage[]> {
+export async function loadRecentMessages(
+  roomId: string,
+  pageIndex = 0,
+  pageSize = 50,
+  userId?: string,
+): Promise<ChatMessage[]> {
   const { data } = await http.get<ApiEnvelope>('/chat/singleMessage/getRecentSingleMessages', {
-    params: { roomId, pageIndex, pageSize },
+    params: { roomId, pageIndex, pageSize, userId },
   })
   const list = data.data?.recentMessage
   return Array.isArray(list) ? (list as ChatMessage[]) : []
+}
+
+export async function searchSingleHistory(params: {
+  roomId: string
+  type?: string
+  query?: string
+  date?: string | Date | null
+  pageIndex?: number
+  pageSize?: number
+  userId?: string
+}): Promise<{ total: number; list: ChatMessage[] }> {
+  const { data } = await http.post<ApiEnvelope>('/chat/singleMessage/historyMessage', {
+    type: 'all',
+    query: '',
+    pageIndex: 0,
+    pageSize: 50,
+    ...params,
+  })
+  const list = data.data?.msgList
+  const total = data.data?.total
+  return {
+    total: typeof total === 'number' ? total : 0,
+    list: Array.isArray(list) ? (list as ChatMessage[]) : [],
+  }
+}
+
+export async function deleteSingleMessageForMe(messageId: string, roomId: string, userId: string): Promise<void> {
+  await http.post<ApiEnvelope>('/chat/singleMessage/deleteForMe', { messageId, roomId, userId })
+}
+
+export async function revokeSingleMessage(messageId: string, roomId: string, userId: string): Promise<ChatMessage | null> {
+  const { data } = await http.post<ApiEnvelope>('/chat/singleMessage/revoke', { messageId, roomId, userId })
+  return (data.data?.message as ChatMessage | undefined) ?? null
+}
+
+export async function markSingleMessagesRead(roomId: string, userId: string): Promise<void> {
+  await http.post<ApiEnvelope>('/chat/singleMessage/isRead', { roomId, userId })
 }
 
 export async function loadGroups(username: string): Promise<GroupItem[]> {

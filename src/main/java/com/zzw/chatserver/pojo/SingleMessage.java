@@ -26,4 +26,8 @@ public class SingleMessage {
     private String message; // 消息内容
     private String messageType; // 消息的类型：emoji/text/img/file/sys/whiteboard/video/audio
     private List<String> isReadUser = new ArrayList<>(); // 值为用户的ID，判断已经读取的用户，在发送消息的时候默认发送发已经读取，在单独会话中Array值只有两个
+    private List<String> deletedFor = new ArrayList<>(); // 软删除用户ID，仅对删除者隐藏
+    private Boolean revoked = false; // 是否已撤回
+    private String revokerId; // 撤回人
+    private Date revokedAt; // 撤回时间
 }

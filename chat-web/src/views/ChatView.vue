@@ -174,6 +174,16 @@
             <span>{{ activeConversation.title }}</span>
             <span class="sub">{{ activeConversation.subtitle }}</span>
           </div>
+          <div v-if="activeConversation.conversationType === 'FRIEND'" class="history-tools">
+            <el-input
+              v-model="historyQuery"
+              clearable
+              placeholder="搜索当前私聊历史"
+              @keyup.enter="searchHistory"
+            />
+            <el-button :loading="historyLoading" @click="searchHistory">搜索</el-button>
+            <el-button text @click="reloadCurrentConversation">最近消息</el-button>
+          </div>
           <el-scrollbar ref="scrollRef" class="msg-scroll">
             <div class="msg-list">
               <div
@@ -184,7 +194,21 @@
               >
                 <div class="bubble">
                   <div class="meta">{{ m.senderNickname || m.senderName }} · {{ formatTime(m.time) }}</div>
-                  <div class="text">{{ m.message }}</div>
+                  <div class="text" :class="{ revoked: m.revoked || m.messageType === 'revoked' }">
+                    {{ m.revoked || m.messageType === 'revoked' ? '该消息已撤回' : m.message }}
+                  </div>
+                  <div v-if="m.id && activeConversation.conversationType === 'FRIEND'" class="msg-actions">
+                    <el-button text size="small" @click.stop="deleteMessage(m)">删除</el-button>
+                    <el-button
+                      v-if="canRevoke(m)"
+                      text
+                      size="small"
+                      type="warning"
+                      @click.stop="revokeMessage(m)"
+                    >
+                      撤回
+                    </el-button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -214,6 +238,9 @@ import { useSessionStore, normalizeUid } from '@/stores/session'
 import {
   loadFriends,
   loadRecentMessages,
+  searchSingleHistory,
+  deleteSingleMessageForMe,
+  markSingleMessagesRead,
   loadGroups,
   loadRecentGroupMessages,
   loadValidateMessages,
@@ -248,6 +275,8 @@ const messages = ref<ChatMessage[]>([])
 const draft = ref('')
 const onlineSet = ref(new Set<string>())
 const scrollRef = ref<{ setScrollTop?: (v: number) => void }>()
+const historyQuery = ref('')
+const historyLoading = ref(false)
 
 const pendingCount = computed(() => validateList.value.filter((item) => item.status === 0).length)
 
@@ -293,6 +322,29 @@ function getGroupId(group: GroupItem) {
   return group.groupId || group.id || group.groupInfo?.gid || ''
 }
 
+function cacheKey(roomId: string) {
+  return `single-history:${session.uid}:${roomId}`
+}
+
+function loadCachedMessages(roomId: string): ChatMessage[] {
+  try {
+    const raw = localStorage.getItem(cacheKey(roomId))
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as ChatMessage[]) : []
+  } catch {
+    return []
+  }
+}
+
+function cacheMessages(roomId: string, list: ChatMessage[]) {
+  try {
+    localStorage.setItem(cacheKey(roomId), JSON.stringify(list.slice(-100)))
+  } catch {
+    /* 浏览器缓存满时不影响主流程 */
+  }
+}
+
 async function selectFriend(f: FriendItem) {
   if (!f.roomId) {
     ElMessage.warning('该好友缺少 roomId，无法聊天')
@@ -306,10 +358,14 @@ async function selectFriend(f: FriendItem) {
     conversationType: 'FRIEND',
   }
   joinRoom(f.roomId)
+  const cached = loadCachedMessages(f.roomId)
+  if (cached.length) messages.value = cached
 
   try {
-    const list = await loadRecentMessages(f.roomId, 0, 80)
+    const list = await loadRecentMessages(f.roomId, 0, 80, session.uid)
     messages.value = [...list].reverse()
+    cacheMessages(f.roomId, messages.value)
+    await markCurrentRead(f.roomId)
     await nextTick()
     scrollBottom()
   } catch {
@@ -374,8 +430,116 @@ async function send() {
     ...msg,
     time: msg.time.toISOString(),
   })
+  if (conv.conversationType === 'FRIEND') cacheMessages(conv.roomId, messages.value)
   draft.value = ''
   nextTick(() => scrollBottom())
+}
+
+async function reloadCurrentConversation() {
+  const conv = activeConversation.value
+  if (!conv) return
+  historyQuery.value = ''
+  try {
+    const list = conv.conversationType === 'FRIEND'
+      ? await loadRecentMessages(conv.roomId, 0, 80, session.uid)
+      : await loadRecentGroupMessages(conv.roomId, 0, 80)
+    messages.value = [...list].reverse()
+    await nextTick()
+    scrollBottom()
+  } catch {
+    ElMessage.error('加载消息失败')
+  }
+}
+
+async function searchHistory() {
+  const conv = activeConversation.value
+  if (!conv || conv.conversationType !== 'FRIEND') return
+  historyLoading.value = true
+  try {
+    const { list, total } = await searchSingleHistory({
+      roomId: conv.roomId,
+      type: 'all',
+      query: historyQuery.value.trim(),
+      pageIndex: 0,
+      pageSize: 80,
+      userId: session.uid,
+    })
+    messages.value = [...list].reverse()
+    await markCurrentRead(conv.roomId)
+    if (!total) ElMessage.info('没有匹配的历史消息')
+    await nextTick()
+    scrollBottom()
+  } catch {
+    ElMessage.error('搜索历史消息失败')
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+function canRevoke(message: ChatMessage) {
+  return Boolean(message.id && message.senderId === session.uid && !message.revoked && message.messageType !== 'revoked')
+}
+
+async function deleteMessage(message: ChatMessage) {
+  const conv = activeConversation.value
+  if (!message.id || !conv?.roomId || !session.uid) return
+  try {
+    await deleteSingleMessageForMe(message.id, conv.roomId, session.uid)
+    messages.value = messages.value.filter((item) => item.id !== message.id)
+    cacheMessages(conv.roomId, messages.value)
+    ElMessage.success('已删除')
+  } catch {
+    ElMessage.error('删除失败')
+  }
+}
+
+async function revokeMessage(message: ChatMessage) {
+  const conv = activeConversation.value
+  if (!message.id || !conv?.roomId || !session.uid) return
+  try {
+    const sock = ensureSocket()
+    sock.emit('revokeSingleMessage', {
+      messageId: message.id,
+      roomId: conv.roomId,
+      userId: session.uid,
+    })
+  } catch {
+    ElMessage.error('撤回失败')
+  }
+}
+
+function applySavedMessage(saved: ChatMessage) {
+  if (!saved.roomId || saved.roomId !== activeConversation.value?.roomId) return
+  const pendingIndex = messages.value.findIndex((item) =>
+    !item.id
+    && item.senderId === saved.senderId
+    && item.message === saved.message
+    && item.messageType === saved.messageType
+  )
+  if (pendingIndex >= 0) {
+    messages.value.splice(pendingIndex, 1, saved)
+    cacheMessages(saved.roomId, messages.value)
+  }
+}
+
+function applyRevokedMessage(revoked: ChatMessage) {
+  if (!revoked.id) return
+  const index = messages.value.findIndex((item) => item.id === revoked.id)
+  if (index >= 0) {
+    messages.value.splice(index, 1, { ...messages.value[index], ...revoked, revoked: true, messageType: 'revoked' })
+    if (revoked.roomId) cacheMessages(revoked.roomId, messages.value)
+  }
+}
+
+async function markCurrentRead(roomId: string) {
+  if (!session.uid) return
+  try {
+    await markSingleMessagesRead(roomId, session.uid)
+    const sock = ensureSocket()
+    sock.emit('isReadMsg', { roomId, userId: session.uid })
+  } catch {
+    /* 已读状态失败不影响聊天主流程 */
+  }
 }
 
 function scrollBottom() {
@@ -531,7 +695,27 @@ function bindSocket() {
     const roomId = String(raw.roomId || '')
     if (!activeConversation.value?.roomId || roomId !== activeConversation.value.roomId) return
     messages.value.push(raw as unknown as ChatMessage)
+    cacheMessages(roomId, messages.value)
+    markCurrentRead(roomId)
     nextTick(() => scrollBottom())
+  }
+
+  const onMessageSaved = (raw: Record<string, unknown>) => {
+    applySavedMessage(raw as unknown as ChatMessage)
+  }
+
+  const onMessageRevoked = (raw: Record<string, unknown>) => {
+    applyRevokedMessage(raw as unknown as ChatMessage)
+  }
+
+  const onRead = (raw: Record<string, unknown>) => {
+    const roomId = String(raw.roomId || '')
+    const userId = String(raw.userId || '')
+    if (!roomId || !userId || roomId !== activeConversation.value?.roomId) return
+    messages.value = messages.value.map((item) => {
+      const users = item.isReadUser ?? []
+      return users.includes(userId) ? item : { ...item, isReadUser: [...users, userId] }
+    })
   }
 
   const onValidateMessage = () => {
@@ -561,6 +745,10 @@ function bindSocket() {
 
   sock.off('onlineUser')
   sock.off('receiveMessage')
+  sock.off('messageSaved')
+  sock.off('singleMessageRevoked')
+  sock.off('revokeSingleMessageFailed')
+  sock.off('isReadMsg')
   sock.off('receiveValidateMessage')
   sock.off('receiveAgreeFriendValidate')
   sock.off('receiveAgreeGroupValidate')
@@ -569,6 +757,10 @@ function bindSocket() {
 
   sock.on('onlineUser', onOnline)
   sock.on('receiveMessage', onRecv)
+  sock.on('messageSaved', onMessageSaved)
+  sock.on('singleMessageRevoked', onMessageRevoked)
+  sock.on('revokeSingleMessageFailed', () => ElMessage.error('撤回失败'))
+  sock.on('isReadMsg', onRead)
   sock.on('receiveValidateMessage', onValidateMessage)
   sock.on('receiveAgreeFriendValidate', onAgreeFriend)
   sock.on('receiveAgreeGroupValidate', onAgreeGroup)
@@ -779,6 +971,17 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 4px;
 }
+.history-tools {
+  padding: 10px 20px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(15, 23, 42, 0.35);
+}
+.history-tools .el-input {
+  max-width: 320px;
+}
 .sub {
   font-size: 11px;
   opacity: 0.45;
@@ -820,6 +1023,16 @@ onBeforeUnmount(() => {
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.45;
+}
+.text.revoked {
+  color: #94a3b8;
+  font-style: italic;
+}
+.msg-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 6px;
 }
 .composer {
   padding: 12px 20px 16px;

@@ -23,4 +23,8 @@ public class  SingleMessageResultVo {
     private String message;
     private String messageType;
     private List<String> isReadUser = new ArrayList<>();
+    private List<String> deletedFor = new ArrayList<>();
+    private Boolean revoked = false;
+    private String revokerId;
+    private Date revokedAt;
 }

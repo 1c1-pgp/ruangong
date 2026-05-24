@@ -174,12 +174,15 @@ public class SocketIoListener {
     @OnEvent("sendNewMessage")
     public void sendNewMessage(SocketIOClient client, NewMessageVo newMessageVo) {
         logger.info("sendNewMessage ---> newMessageVo：{}", newMessageVo);
+        Object messagePayload = newMessageVo;
         if (newMessageVo.getConversationType().equals(ConstValueEnum.FRIEND)) {
             SingleMessage singleMessage = new SingleMessage();
             BeanUtils.copyProperties(newMessageVo, singleMessage);
             singleMessage.setSenderId(new ObjectId(newMessageVo.getSenderId()));
             // System.out.println("待插入的单聊消息为：" + singleMessage);
-            singleMessageService.addNewSingleMessage(singleMessage);
+            SingleMessageResultVo savedMessage = singleMessageService.addNewSingleMessage(singleMessage);
+            messagePayload = savedMessage;
+            client.sendEvent("messageSaved", savedMessage);
         } else if (newMessageVo.getConversationType().equals(ConstValueEnum.GROUP)) {
             GroupMessage groupMessage = new GroupMessage();
             BeanUtils.copyProperties(newMessageVo, groupMessage);
@@ -191,8 +194,22 @@ public class SocketIoListener {
         Collection<SocketIOClient> clients = socketIOServer.getRoomOperations(newMessageVo.getRoomId()).getClients(); //实际上同一房间只有2个客户端
         for (SocketIOClient item : clients) {
             if (item != client) {
-                item.sendEvent("receiveMessage", newMessageVo);
+                item.sendEvent("receiveMessage", messagePayload);
             }
+        }
+    }
+
+    @OnEvent("revokeSingleMessage")
+    public void revokeSingleMessage(SocketIOClient client, SingleMessageActionRequestVo requestVo) {
+        logger.info("revokeSingleMessage ---> requestVo：{}", requestVo);
+        SingleMessageResultVo revokedMessage = singleMessageService.revokeMessage(requestVo);
+        if (revokedMessage == null || requestVo.getRoomId() == null) {
+            client.sendEvent("revokeSingleMessageFailed", requestVo);
+            return;
+        }
+        Collection<SocketIOClient> clients = socketIOServer.getRoomOperations(requestVo.getRoomId()).getClients();
+        for (SocketIOClient item : clients) {
+            item.sendEvent("singleMessageRevoked", revokedMessage);
         }
     }
 

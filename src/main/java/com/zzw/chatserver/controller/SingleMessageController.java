@@ -3,6 +3,7 @@ package com.zzw.chatserver.controller;
 import com.zzw.chatserver.common.R;
 import com.zzw.chatserver.pojo.vo.HistoryMsgRequestVo;
 import com.zzw.chatserver.pojo.vo.IsReadMessageRequestVo;
+import com.zzw.chatserver.pojo.vo.SingleMessageActionRequestVo;
 import com.zzw.chatserver.pojo.vo.SingleHistoryResultVo;
 import com.zzw.chatserver.pojo.vo.SingleMessageResultVo;
 import com.zzw.chatserver.service.SingleMessageService;
@@ -30,8 +31,8 @@ public class SingleMessageController {
      * 获取最近的单聊消息
      */
     @GetMapping("/getRecentSingleMessages")
-    public R getRecentSingleMessages(String roomId, Integer pageIndex, Integer pageSize) {
-        List<SingleMessageResultVo> recentMessage = singleMessageService.getRecentMessage(roomId, pageIndex, pageSize);
+    public R getRecentSingleMessages(String roomId, Integer pageIndex, Integer pageSize, String userId) {
+        List<SingleMessageResultVo> recentMessage = singleMessageService.getRecentMessage(roomId, pageIndex, pageSize, userId);
         return R.ok().data("recentMessage", recentMessage);
     }
 
@@ -52,5 +53,26 @@ public class SingleMessageController {
         // System.out.println("查看历史消息的请求参数为：" + historyMsgVo);
         SingleHistoryResultVo singleHistoryMsg = singleMessageService.getSingleHistoryMsg(historyMsgVo);
         return R.ok().data("total", singleHistoryMsg.getTotal()).data("msgList", singleHistoryMsg.getMsgList());
+    }
+
+    /**
+     * 删除单条私聊消息。软删除只对当前用户生效，另一方仍可查看。
+     */
+    @PostMapping("/deleteForMe")
+    public R deleteForMe(@RequestBody SingleMessageActionRequestVo requestVo) {
+        boolean success = singleMessageService.deleteForUser(requestVo);
+        return success ? R.ok().message("删除成功") : R.error().message("删除失败");
+    }
+
+    /**
+     * 撤回自己发送的私聊消息，并同步给房间内双方。
+     */
+    @PostMapping("/revoke")
+    public R revoke(@RequestBody SingleMessageActionRequestVo requestVo) {
+        SingleMessageResultVo message = singleMessageService.revokeMessage(requestVo);
+        if (message == null) {
+            return R.error().message("只能撤回自己发送的消息");
+        }
+        return R.ok().data("message", message);
     }
 }

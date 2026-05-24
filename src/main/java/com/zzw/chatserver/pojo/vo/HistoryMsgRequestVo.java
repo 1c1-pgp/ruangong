@@ -16,4 +16,5 @@ public class HistoryMsgRequestVo {
     private Date date; //日期
     private Integer pageIndex;
     private Integer pageSize;
+    private String userId; // 当前查询用户，用于过滤仅自己删除的消息
 }
