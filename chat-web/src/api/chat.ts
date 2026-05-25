@@ -160,3 +160,10 @@ export async function searchUsers(
   const list = data.data?.userList
   return Array.isArray(list) ? list : []
 }
+
+export async function addFriendByUsername(targetUsername: string, targetNickname: string): Promise<void> {
+  await http.post<ApiEnvelope>('/chat/goodFriend/addByUsername', {
+    targetUsername,
+    targetNickname,
+  })
+}

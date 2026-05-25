@@ -3,6 +3,11 @@ package com.zzw.chatserver.controller;
 import com.zzw.chatserver.common.R;
 import com.zzw.chatserver.common.ResultEnum;
 import com.zzw.chatserver.pojo.vo.DelGoodFriendRequestVo;
+import com.zzw.chatserver.pojo.vo.AddFriendByUsernameVo;
+import com.zzw.chatserver.pojo.GoodFriend;
+import com.zzw.chatserver.dao.UserDao;
+import com.zzw.chatserver.pojo.User;
+import org.bson.types.ObjectId;
 import com.zzw.chatserver.pojo.vo.MyFriendListResultVo;
 import com.zzw.chatserver.pojo.vo.RecentConversationVo;
 import com.zzw.chatserver.pojo.vo.SingleRecentConversationResultVo;
@@ -19,6 +24,9 @@ public class GoodFriendController {
 
     @Resource
     private GoodFriendService goodFriendService;
+
+    @Resource
+    private UserDao userDao;
 
     /**
      * 查询我的好友列表
@@ -48,5 +56,27 @@ public class GoodFriendController {
         if (!userId.equals(requestVo.getUserM())) return R.error().resultEnum(ResultEnum.ILLEGAL_OPERATION); //不是本人，非法操作
         goodFriendService.deleteFriend(requestVo);
         return R.ok().message("删除好友成功");
+    }
+
+    /**
+     * 通过用户名 + 昵称直接添加好友（前端需同时提供用户名与昵称以校验）
+     */
+    @PostMapping("/addByUsername")
+    public R addFriendByUsername(@RequestBody AddFriendByUsernameVo vo) {
+        String userId = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (vo == null || vo.getTargetUsername() == null) return R.error().message("缺少目标用户名");
+        User target = userDao.findUserByUsername(vo.getTargetUsername());
+        if (target == null) return R.error().message("目标用户不存在");
+        if (vo.getTargetNickname() == null || !vo.getTargetNickname().equals(target.getNickname())) {
+            return R.error().message("昵称与用户名不匹配，请确认");
+        }
+        if (target.getUserId() != null && target.getUserId().toString().equals(userId)) {
+            return R.error().message("不能添加自己为好友");
+        }
+        GoodFriend gf = new GoodFriend();
+        gf.setUserM(new ObjectId(userId));
+        gf.setUserY(target.getUserId());
+        goodFriendService.addFriend(gf);
+        return R.ok().message("添加好友成功");
     }
 }

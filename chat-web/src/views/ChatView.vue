@@ -13,6 +13,7 @@
           <div class="aside-head-title">会话</div>
           <div class="aside-actions">
             <el-button text size="small" @click="activeTab = 'search'">搜索用户</el-button>
+            <el-button text size="small" @click="openAddDialog">添加好友</el-button>
           </div>
         </div>
 
@@ -166,6 +167,21 @@
             </div>
           </template>
         </el-scrollbar>
+
+        <el-dialog title="添加好友（用户名 + 昵称）" v-model:visible="showAddDialog">
+          <el-form label-position="top">
+            <el-form-item label="用户名">
+              <el-input v-model="addUsername" autocomplete="username" />
+            </el-form-item>
+            <el-form-item label="昵称（用于二次校验）">
+              <el-input v-model="addNickname" />
+            </el-form-item>
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+              <el-button @click="showAddDialog = false">取消</el-button>
+              <el-button type="primary" :loading="addLoading" @click="submitAddFriend">添加</el-button>
+            </div>
+          </el-form>
+        </el-dialog>
       </el-aside>
 
       <el-main class="main">
@@ -245,6 +261,7 @@ import {
   loadRecentGroupMessages,
   loadValidateMessages,
   searchUsers,
+  addFriendByUsername,
   type FriendItem,
   type ChatMessage,
   type GroupItem,
@@ -264,6 +281,10 @@ const searchQuery = ref('')
 const searchResults = ref<unknown[]>([])
 const searchLoading = ref(false)
 const sendingRequestSet = ref(new Set<string>())
+const showAddDialog = ref(false)
+const addUsername = ref('')
+const addNickname = ref('')
+const addLoading = ref(false)
 const activeTab = ref<'friends' | 'groups' | 'search' | 'validate'>('friends')
 const activeConversation = ref<{
   roomId: string
@@ -605,6 +626,31 @@ async function sendFriendRequest(user: unknown) {
     ElMessage.error('发送好友申请失败')
   } finally {
     sendingRequestSet.value.delete(targetId)
+  }
+}
+
+function openAddDialog() {
+  addUsername.value = ''
+  addNickname.value = ''
+  showAddDialog.value = true
+}
+
+async function submitAddFriend() {
+  const username = addUsername.value.trim()
+  const nickname = addNickname.value.trim()
+  if (!username) return ElMessage.warning('请输入用户名')
+  if (!nickname) return ElMessage.warning('请输入昵称以便校验')
+  addLoading.value = true
+  try {
+    await addFriendByUsername(username, nickname)
+    ElMessage.success('添加成功，已刷新好友列表')
+    showAddDialog.value = false
+    await loadFriendList()
+  } catch (err: any) {
+    const msg = err?.response?.data?.message || err?.message || '添加好友失败'
+    ElMessage.error(msg)
+  } finally {
+    addLoading.value = false
   }
 }
 
