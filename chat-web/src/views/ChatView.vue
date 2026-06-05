@@ -297,11 +297,27 @@
 
           <!-- 输入区 -->
           <div class="chat-composer">
-            <input ref="fileInputRef" type="file" hidden @change="onFileSelected" />
-            <div class="composer-toolbar">
+            <input ref="fileInputRef" type="file" multiple hidden @change="onFileSelected" />
+            <div class="composer-toolbar" @dragover.prevent @dragenter.prevent @drop.prevent="onDrop">
               <el-tooltip content="发送图片或文件">
                 <el-button circle :loading="uploadLoading" @click="triggerFilePick">📎</el-button>
               </el-tooltip>
+              <el-progress v-if="uploadLoading" :percentage="uploadProgress" style="width:140px; margin-left:12px" />
+            </div>
+            <div class="attachment-list" v-if="attachments.length" style="display:flex; gap:12px; padding:8px 12px; align-items:center;">
+              <div v-for="(att, idx) in attachments" :key="idx" style="display:flex; flex-direction:column; align-items:center; width:120px;">
+                <template v-if="detectMessageType(att.fileRawName) === 'img'">
+                  <el-image :src="att.preview || mediaUrl(att.filePath)" fit="cover" style="width:96px; height:72px; border-radius:6px" />
+                </template>
+                <template v-else>
+                  <div style="width:96px; height:72px; display:flex; align-items:center; justify-content:center; border:1px dashed #dcdfe6; border-radius:6px">📎</div>
+                </template>
+                <div style="margin-top:6px; display:flex; align-items:center; gap:6px;">
+                  <el-progress v-if="att.status === 'uploading'" :percentage="att.progress || 0" :stroke-width="6" style="width:80px" />
+                  <span v-else-if="att.status === 'error'" style="color:#f56c6c">上传失败</span>
+                  <el-button type="text" size="small" @click="removeAttachment(idx)">删除</el-button>
+                </div>
+              </div>
             </div>
             <el-input
               v-model="draft"
@@ -310,7 +326,7 @@
               placeholder="输入消息，Enter 发送，Shift+Enter 换行"
               @keydown="onDraftKeydown"
             />
-            <el-button type="primary" round :disabled="!draft.trim()" class="send-btn" @click="send">
+            <el-button type="primary" round :disabled="!draft.trim() && !attachments.length" class="send-btn" @click="send">
               发送
             </el-button>
           </div>
@@ -443,6 +459,8 @@ const historyType = ref('all')
 const historyLoading = ref(false)
 const uploadLoading = ref(false)
 const fileInputRef = ref<HTMLInputElement>()
+const uploadProgress = ref(0)
+const attachments = ref<Array<{ fileRawName: string; filePath?: string; status: 'uploading' | 'done' | 'error'; preview?: string; progress?: number }>>([])
 const groupSearchQuery = ref('')
 const groupSearchResults = ref<GroupSearchItem[]>([])
 const groupSearchLoading = ref(false)
@@ -468,6 +486,8 @@ const filteredFriends = computed(() => {
 function avatarUrl(photo?: string) {
   if (!photo) return undefined
   if (photo.startsWith('http')) return photo
+  // 如果已经包含 /chat 前缀，直接返回，避免重复拼接成 /chat/chat/...
+  if (photo.startsWith('/chat')) return photo
   return `/chat${photo.startsWith('/') ? '' : '/'}${photo}`
 }
 
@@ -514,6 +534,8 @@ function getGroupId(g: GroupItem) {
 function mediaUrl(path?: string) {
   if (!path) return ''
   if (path.startsWith('http')) return path
+  // 如果已经是以 /chat 开头，则不重复拼接
+  if (path.startsWith('/chat')) return path
   return `/chat${path.startsWith('/') ? '' : '/'}${path}`
 }
 
@@ -637,9 +659,29 @@ async function sendMessagePayload(payload: { message: string; messageType: strin
 
 async function send() {
   const text = draft.value.trim()
-  if (!text) return
-  draft.value = ''
-  await sendMessagePayload({ message: text, messageType: 'text' })
+  // prevent sending while uploads are in progress
+  if (attachments.value.some((a) => a.status === 'uploading')) {
+    return ElMessage.warning('有文件正在上传，请稍后再发送')
+  }
+  // report errors
+  if (attachments.value.some((a) => a.status === 'error')) {
+    return ElMessage.warning('有文件上传失败，请删除或重试后再发送')
+  }
+
+  // send attachments first
+  if (attachments.value.length) {
+    for (const att of attachments.value) {
+      if (att.status === 'done' && att.filePath) {
+        await sendMessagePayload({ message: att.filePath, messageType: detectMessageType(att.fileRawName), fileRawName: att.fileRawName })
+      }
+    }
+    attachments.value = []
+  }
+
+  if (text) {
+    draft.value = ''
+    await sendMessagePayload({ message: text, messageType: 'text' })
+  }
 }
 
 function onDraftKeydown(e: KeyboardEvent) {
@@ -649,18 +691,49 @@ function onDraftKeydown(e: KeyboardEvent) {
 function triggerFilePick() { fileInputRef.value?.click() }
 
 async function onFileSelected(e: Event) {
-  const file = (e.target as HTMLInputElement).files?.[0]
+  const files = Array.from((e.target as HTMLInputElement).files || [])
   ;(e.target as HTMLInputElement).value = ''
-  if (!file || !activeConversation.value) return
+  if (!files.length || !activeConversation.value) return
   uploadLoading.value = true
   try {
-    const { filePath, fileRawName } = await uploadChatFile(file)
-    if (!filePath) throw new Error('上传失败')
-    await sendMessagePayload({ message: filePath, messageType: detectMessageType(fileRawName), fileRawName })
-    ElMessage.success('已发送')
-  } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || err?.message || '上传失败')
+    for (const file of files) {
+      const att = { fileRawName: file.name, status: 'uploading' as const, preview: URL.createObjectURL(file), progress: 0 }
+      attachments.value.push(att)
+      try {
+        const { filePath, fileRawName } = await uploadChatFile(file, (p) => {
+          att.progress = p
+        })
+        if (!filePath) throw new Error('上传失败')
+        att.filePath = filePath
+        att.status = 'done'
+        att.progress = 100
+      } catch (err: any) {
+        att.status = 'error'
+        ElMessage.error(err?.response?.data?.message || err?.message || `上传 ${file.name} 失败`)
+      }
+    }
+    ElMessage.success('上传完成，可点击发送按钮发送消息')
   } finally { uploadLoading.value = false }
+}
+
+async function onDrop(e: DragEvent) {
+  const dt = e.dataTransfer
+  if (!dt) return
+  const files = Array.from(dt.files || [])
+  if (!files.length) return
+  // reuse flow
+  // create a fake event.target.files for compatibility
+  const input = fileInputRef.value
+  const evt = { target: { files } } as unknown as Event
+  await onFileSelected(evt)
+}
+
+function removeAttachment(idx: number) {
+  const att = attachments.value[idx]
+  if (att?.preview) {
+    try { URL.revokeObjectURL(att.preview) } catch { /* ignore */ }
+  }
+  attachments.value.splice(idx, 1)
 }
 
 async function reloadCurrentConversation() {

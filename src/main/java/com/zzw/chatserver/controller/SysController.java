@@ -112,7 +112,7 @@ public class SysController {
         String savedName = UUID.randomUUID() + ext;
         Path target = localUploadDir.resolve(savedName);
         file.transferTo(target.toFile());
-        return "/chat/uploads/" + savedName;
+        return "/uploads/" + savedName;
     }
 
     //获取文件的真实地址，主要用于防盗链

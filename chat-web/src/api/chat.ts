@@ -77,11 +77,20 @@ export interface ValidateMessageItem {
   }
 }
 
-export async function uploadChatFile(file: File): Promise<{ filePath: string; fileRawName: string }> {
+export async function uploadChatFile(
+  file: File,
+  onProgress?: (percent: number) => void,
+): Promise<{ filePath: string; fileRawName: string }> {
   const form = new FormData()
   form.append('file', file)
   const { data } = await http.post<ApiEnvelope>('/chat/sys/uploadFile', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    onUploadProgress: (ev: ProgressEvent) => {
+      if (onProgress && ev.total) {
+        const p = Math.round((ev.loaded / ev.total) * 100)
+        onProgress(p)
+      }
+    },
   })
   return {
     filePath: String(data.data?.filePath ?? ''),
