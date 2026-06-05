@@ -1,0 +1,54 @@
+:root {
+  --im-bg: #0f1419;
+  --im-surface: #1a2332;
+  --im-surface-2: #243044;
+  --im-border: rgba(255, 255, 255, 0.08);
+  --im-text: #e8edf4;
+  --im-muted: #8b9cb3;
+  --im-accent: #6366f1;
+  --im-accent-soft: rgba(99, 102, 241, 0.18);
+  --im-accent-hover: #818cf8;
+  --im-success: #34d399;
+  --im-danger: #f87171;
+  --im-radius: 14px;
+  --im-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--im-bg);
+  color: var(--im-text);
+}
+
+/* Element Plus dark overrides */
+.el-button--primary {
+  --el-button-bg-color: var(--im-accent);
+  --el-button-border-color: var(--im-accent);
+  --el-button-hover-bg-color: var(--im-accent-hover);
+  --el-button-hover-border-color: var(--im-accent-hover);
+}
+
+.el-input__wrapper,
+.el-textarea__inner,
+.el-select__wrapper {
+  background: var(--im-surface-2) !important;
+  box-shadow: 0 0 0 1px var(--im-border) inset !important;
+}
+
+.el-dialog {
+  --el-dialog-bg-color: var(--im-surface);
+  --el-dialog-border-radius: var(--im-radius);
+  border: 1px solid var(--im-border);
+}
+
+.el-drawer {
+  --el-drawer-bg-color: var(--im-surface);
+}
+
+.el-empty__description p {
+  color: var(--im-muted);
+}

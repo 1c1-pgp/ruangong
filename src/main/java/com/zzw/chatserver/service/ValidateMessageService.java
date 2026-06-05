@@ -63,10 +63,12 @@ public class ValidateMessageService {
         for (ValidateMessageResultVo son : validatemessages) {
             item = new ValidateMessageResponseVo();
             BeanUtils.copyProperties(son, item);
-            if (son.getGroupId() != null && son.getGroupList() != null && son.getGroupList().size() > 0) {
+            if (son.getGroupId() != null && son.getGroupList() != null && !son.getGroupList().isEmpty()) {
                 item.setGroupInfo(new SimpleGroup());
                 item.getGroupInfo().setGid(son.getGroupList().get(0).getGroupId().toString());
                 item.getGroupInfo().setTitle(son.getGroupList().get(0).getTitle());
+                item.getGroupInfo().setCode(son.getGroupList().get(0).getCode());
+                item.getGroupInfo().setImg(son.getGroupList().get(0).getImg());
             }
             responseVoList.add(item);
         }

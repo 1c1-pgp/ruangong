@@ -199,6 +199,20 @@ public class GoodFriendService {
         mongoTemplate.remove(query, "singlemessages");
     }
 
+    public boolean areFriends(String userId, String friendId) {
+        if (userId == null || friendId == null || userId.equals(friendId)) {
+            return false;
+        }
+        ObjectId uid = new ObjectId(userId);
+        ObjectId fid = new ObjectId(friendId);
+        Query query = new Query();
+        query.addCriteria(new Criteria().orOperator(
+                Criteria.where("userM").is(uid).and("userY").is(fid),
+                Criteria.where("userM").is(fid).and("userY").is(uid)
+        ));
+        return mongoTemplate.exists(query, GoodFriend.class);
+    }
+
     private User getUser(String uid) {
         return userDao.findById(new ObjectId(uid)).orElse(null);
     }

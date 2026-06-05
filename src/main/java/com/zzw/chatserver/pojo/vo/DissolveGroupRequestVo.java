@@ -7,9 +7,6 @@ import lombok.NoArgsConstructor;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class SimpleGroup {
-    private String gid;
-    private String title;
-    private String code;
-    private String img;
+public class DissolveGroupRequestVo {
+    private String groupId;
 }

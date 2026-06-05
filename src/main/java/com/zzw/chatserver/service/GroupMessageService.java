@@ -5,6 +5,7 @@ import com.zzw.chatserver.pojo.GroupMessage;
 import com.zzw.chatserver.pojo.vo.GroupHistoryResultVo;
 import com.zzw.chatserver.pojo.vo.GroupMessageResultVo;
 import com.zzw.chatserver.pojo.vo.HistoryMsgRequestVo;
+import org.springframework.beans.BeanUtils;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -78,7 +79,23 @@ public class GroupMessageService {
         return mongoTemplate.find(query, GroupMessageResultVo.class, "groupmessages");
     }
 
-    public void addNewGroupMessage(GroupMessage groupMessage) {
-        groupMessageDao.save(groupMessage);
+    public GroupMessageResultVo addNewGroupMessage(GroupMessage groupMessage) {
+        GroupMessage saved = groupMessageDao.save(groupMessage);
+        return toResultVo(saved);
+    }
+
+    private GroupMessageResultVo toResultVo(GroupMessage message) {
+        if (message == null) {
+            return null;
+        }
+        GroupMessageResultVo vo = new GroupMessageResultVo();
+        BeanUtils.copyProperties(message, vo);
+        if (message.getId() != null) {
+            vo.setId(message.getId().toHexString());
+        }
+        if (message.getSenderId() != null) {
+            vo.setSenderId(message.getSenderId().toHexString());
+        }
+        return vo;
     }
 }

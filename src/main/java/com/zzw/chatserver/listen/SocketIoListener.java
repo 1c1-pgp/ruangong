@@ -187,8 +187,9 @@ public class SocketIoListener {
             GroupMessage groupMessage = new GroupMessage();
             BeanUtils.copyProperties(newMessageVo, groupMessage);
             groupMessage.setSenderId(new ObjectId(newMessageVo.getSenderId()));
-            // System.out.println("待插入的群聊消息为：" + groupMessage);
-            groupMessageService.addNewGroupMessage(groupMessage);
+            GroupMessageResultVo savedMessage = groupMessageService.addNewGroupMessage(groupMessage);
+            messagePayload = savedMessage;
+            client.sendEvent("messageSaved", savedMessage);
         }
         //通知该房间收到消息接受到消息
         Collection<SocketIOClient> clients = socketIOServer.getRoomOperations(newMessageVo.getRoomId()).getClients(); //实际上同一房间只有2个客户端
@@ -321,7 +322,7 @@ public class SocketIoListener {
     @OnEvent("sendDisAgreeGroupValidate")
     public void sendDisAgreeGroupValidate(SocketIOClient client, ValidateMessageResponseVo validateMessage) {
         logger.info("sendDisAgreeGroupValidate ---> validateMessage：{}", validateMessage);
-        validateMessageService.changeFriendValidateNewsStatus(validateMessage.getId(), 2);
+        validateMessageService.changeGroupValidateNewsStatus(validateMessage.getId(), 2);
     }
 
     //解散群或者退出群聊，则转发通知与这群关联的所有在线客户端 去更新我的群列表和最近会话中的群列表

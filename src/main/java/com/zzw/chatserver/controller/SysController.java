@@ -25,8 +25,11 @@ import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.net.URLEncoder;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Controller
 @RequestMapping("/sys")
@@ -46,6 +49,9 @@ public class SysController {
 
     @Resource
     private OnlineUserService onlineUserService;
+
+    @Resource
+    private Path localUploadDir;
 
 
     /**
@@ -85,11 +91,28 @@ public class SysController {
     @PostMapping("/uploadFile")
     @ResponseBody
     public R uploadFile(MultipartFile file) throws IOException, MyException {
-        //根据扩展名来设置消息类型：emoji/text/img/file/sys/whiteboard/video/audio
-        String filePartName = FastDFSUtil.uploadFile(file);
-        String filePath = nginxHost + filePartName;
-        // System.out.println("在服务器的文件名为：" + filePartName);
-        return R.ok().data("filePath", filePath);
+        String originalName = file.getOriginalFilename() == null ? "file" : file.getOriginalFilename();
+        String filePath;
+        try {
+            String filePartName = FastDFSUtil.uploadFile(file);
+            filePath = nginxHost + filePartName;
+        } catch (Exception ex) {
+            filePath = saveLocalUpload(file, originalName);
+        }
+        return R.ok().data("filePath", filePath).data("fileRawName", originalName);
+    }
+
+    private String saveLocalUpload(MultipartFile file, String originalName) throws IOException {
+        Files.createDirectories(localUploadDir);
+        String ext = "";
+        int dot = originalName.lastIndexOf('.');
+        if (dot >= 0) {
+            ext = originalName.substring(dot);
+        }
+        String savedName = UUID.randomUUID() + ext;
+        Path target = localUploadDir.resolve(savedName);
+        file.transferTo(target.toFile());
+        return "/chat/uploads/" + savedName;
     }
 
     //获取文件的真实地址，主要用于防盗链

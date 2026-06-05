@@ -30,6 +30,7 @@ export interface ChatMessage {
 export interface GroupItem {
   id?: string
   groupId?: string
+  holder?: number
   groupInfo?: {
     gid?: string
     title?: string
@@ -42,6 +43,20 @@ export interface GroupItem {
   }
 }
 
+export interface GroupSearchItem {
+  gid?: string
+  title?: string
+  desc?: string
+  img?: string
+  code?: string
+  userNum?: number
+  holderName?: string
+  holderUserInfo?: {
+    uid?: string
+    username?: string
+    nickname?: string
+  }
+}
 export interface ValidateMessageItem {
   id?: string
   roomId?: string
@@ -60,6 +75,56 @@ export interface ValidateMessageItem {
     img?: string
     code?: string
   }
+}
+
+export async function uploadChatFile(file: File): Promise<{ filePath: string; fileRawName: string }> {
+  const form = new FormData()
+  form.append('file', file)
+  const { data } = await http.post<ApiEnvelope>('/chat/sys/uploadFile', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return {
+    filePath: String(data.data?.filePath ?? ''),
+    fileRawName: String(data.data?.fileRawName ?? file.name),
+  }
+}
+
+export async function searchGroupHistory(params: {
+  roomId: string
+  type?: string
+  query?: string
+  pageIndex?: number
+  pageSize?: number
+}): Promise<{ total: number; list: ChatMessage[] }> {
+  const { data } = await http.post<ApiEnvelope>('/chat/groupMessage/historyMessages', {
+    type: 'all',
+    query: '',
+    pageIndex: 0,
+    pageSize: 50,
+    ...params,
+  })
+  const list = data.data?.msgList
+  const total = data.data?.total
+  return {
+    total: typeof total === 'number' ? total : 0,
+    list: Array.isArray(list) ? (list as ChatMessage[]) : [],
+  }
+}
+
+export async function searchGroups(
+  searchContent: string,
+  type: 'code' | 'title' = 'code',
+  pageIndex = 0,
+  pageSize = 10,
+): Promise<GroupSearchItem[]> {
+  const { data } = await http.post<ApiEnvelope>('/chat/group/preFetchGroup', {
+    type,
+    searchContent,
+    pageIndex,
+    pageSize,
+  })
+  const list = data.data?.groupList
+  return Array.isArray(list) ? (list as GroupSearchItem[]) : []
 }
 
 export async function loadFriends(userId: string): Promise<FriendItem[]> {
@@ -128,12 +193,57 @@ export async function loadGroups(username: string): Promise<GroupItem[]> {
   return Array.isArray(list) ? (list as GroupItem[]) : []
 }
 
+export async function createGroup(params: {
+  title: string
+  desc?: string
+  holderName: string
+  holderUserId: string
+}): Promise<{ groupId: string; groupCode: string }> {
+  const { data } = await http.post<ApiEnvelope>('/chat/group/createGroup', params)
+  return {
+    groupId: String(data.data?.groupId ?? ''),
+    groupCode: String(data.data?.groupCode ?? ''),
+  }
+}
+
+export async function inviteToGroup(params: {
+  groupId: string
+  invitedUserIds: string[]
+  inviterUserId: string
+}): Promise<{ invitedCount: number; invitedUserIds: string[]; skippedUserIds: string[] }> {
+  const { data } = await http.post<ApiEnvelope>('/chat/group/inviteToGroup', params)
+  return {
+    invitedCount: Number(data.data?.invitedCount ?? 0),
+    invitedUserIds: Array.isArray(data.data?.invitedUserIds) ? (data.data?.invitedUserIds as string[]) : [],
+    skippedUserIds: Array.isArray(data.data?.skippedUserIds) ? (data.data?.skippedUserIds as string[]) : [],
+  }
+}
+
+export async function quitGroup(groupId: string, userId: string): Promise<void> {
+  await http.post<ApiEnvelope>('/chat/group/quitGroup', { groupId, userId, holder: 0 })
+}
+
+export async function dissolveGroup(groupId: string): Promise<void> {
+  await http.post<ApiEnvelope>('/chat/group/dissolveGroup', { groupId })
+}
+
 export async function loadRecentGroupMessages(roomId: string, pageIndex = 0, pageSize = 50): Promise<ChatMessage[]> {
   const { data } = await http.get<ApiEnvelope>('/chat/groupMessage/getRecentGroupMessages', {
     params: { roomId, pageIndex, pageSize },
   })
   const list = data.data?.recentGroupMessages
   return Array.isArray(list) ? (list as ChatMessage[]) : []
+}
+
+export async function getGroupInfo(groupId: string): Promise<{
+  groupInfo: Record<string, unknown>
+  members: Array<{ userId?: string; username?: string; holder?: number; userInfo?: { nickname?: string; photo?: string } }>
+}> {
+  const { data } = await http.get<ApiEnvelope>('/chat/group/getGroupInfo', { params: { groupId } })
+  return {
+    groupInfo: (data.data?.groupInfo as Record<string, unknown>) ?? {},
+    members: Array.isArray(data.data?.users) ? data.data.users : [],
+  }
 }
 
 export async function loadValidateMessages(userId: string): Promise<ValidateMessageItem[]> {

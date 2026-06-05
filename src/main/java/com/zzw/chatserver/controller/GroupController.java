@@ -27,7 +27,6 @@ public class GroupController {
     @GetMapping("/getMyGroupList")
     public R getMyGroupList(String username) {
         List<MyGroupResultVo> myGroupList = groupUserService.getGroupUsersByUserName(username);
-        // System.out.println("我的群聊列表为：" + myGroupList);
         return R.ok().data("myGroupList", myGroupList);
     }
 
@@ -36,9 +35,7 @@ public class GroupController {
      */
     @PostMapping("/recentGroup")
     public R getRecentGroup(@RequestBody RecentGroupVo recentGroupVo) {
-        // System.out.println("最近的群聊列表请求参数为：" + recentGroupVo);
         List<MyGroupResultVo> recentGroups = groupUserService.getRecentGroup(recentGroupVo);
-        // System.out.println("最近的群聊列表为：" + recentGroups);
         return R.ok().data("recentGroups", recentGroups);
     }
 
@@ -48,9 +45,7 @@ public class GroupController {
     @GetMapping("/getGroupInfo")
     public R getGroupInfo(String groupId) {
         Group groupInfo = groupService.getGroupInfo(groupId);
-        // System.out.println("查询出的群消息为：" + groupInfo);
         List<MyGroupResultVo> groupUsers = groupUserService.getGroupUsersByGroupId(groupId);
-        // System.out.println("群聊详情为：" + groupUsers);
         return R.ok().data("groupInfo", groupInfo).data("users", groupUsers);
     }
 
@@ -59,7 +54,7 @@ public class GroupController {
      */
     @PostMapping("/preFetchGroup")
     public R searchGroup(@RequestBody SearchRequestVo requestVo) {
-        String userId = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal(); // 这个 principal 跟校验token时保存认证信息有关
+        String userId = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         List<SearchGroupResponseVo> groupResponseVos = groupService.searchGroup(requestVo, userId);
         return R.ok().data("groupList", groupResponseVos);
     }
@@ -69,8 +64,30 @@ public class GroupController {
      */
     @PostMapping("/createGroup")
     public R createGroup(@RequestBody CreateGroupRequestVo requestVo) {
-        String groupCode = groupService.createGroup(requestVo);
-        return R.ok().data("groupCode", groupCode);
+        String userId = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (requestVo.getHolderUserId() != null && !userId.equals(requestVo.getHolderUserId())) {
+            return R.error().resultEnum(ResultEnum.ILLEGAL_OPERATION);
+        }
+        requestVo.setHolderUserId(userId);
+        CreateGroupResultVo result = groupService.createGroup(requestVo);
+        return R.ok().data("groupCode", result.getGroupCode()).data("groupId", result.getGroupId());
+    }
+
+    /**
+     * 邀请好友入群（发送群聊验证消息）
+     */
+    @PostMapping("/inviteToGroup")
+    public R inviteToGroup(@RequestBody InviteToGroupRequestVo requestVo) {
+        String userId = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (requestVo.getInviterUserId() != null && !userId.equals(requestVo.getInviterUserId())) {
+            return R.error().resultEnum(ResultEnum.ILLEGAL_OPERATION);
+        }
+        requestVo.setInviterUserId(userId);
+        InviteToGroupResultVo result = groupService.inviteToGroup(requestVo);
+        return R.ok()
+                .data("invitedCount", result.getInvitedCount())
+                .data("invitedUserIds", result.getInvitedUserIds())
+                .data("skippedUserIds", result.getSkippedUserIds());
     }
 
     /**
@@ -83,15 +100,36 @@ public class GroupController {
     }
 
     /**
-     * 退出群聊
+     * 退出群聊（非群主）
      */
     @PostMapping("/quitGroup")
     public R quitGroup(@RequestBody QuitGroupRequestVo requestVo) {
-        // System.out.println("退出群聊的请求参数为：" + requestVo);
-        String userId = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal(); // 这个 principal 跟校验token时保存认证信息有关
-        if (!userId.equals(requestVo.getUserId()))
-            return R.error().resultEnum(ResultEnum.ILLEGAL_OPERATION); //当前操作人不匹配，非法操作
+        String userId = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!userId.equals(requestVo.getUserId())) {
+            return R.error().resultEnum(ResultEnum.ILLEGAL_OPERATION);
+        }
+        if (groupService.isGroupHolder(userId, requestVo.getGroupId())) {
+            return R.error().message("群主请使用解散群聊接口");
+        }
+        requestVo.setHolder(0);
         groupService.quitGroup(requestVo);
-        return R.ok().message("操作成功");
+        return R.ok().message("已退出群聊");
+    }
+
+    /**
+     * 解散群聊（仅群主）
+     */
+    @PostMapping("/dissolveGroup")
+    public R dissolveGroup(@RequestBody DissolveGroupRequestVo requestVo) {
+        String userId = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!groupService.isGroupHolder(userId, requestVo.getGroupId())) {
+            return R.error().resultEnum(ResultEnum.ILLEGAL_OPERATION);
+        }
+        QuitGroupRequestVo quitVo = new QuitGroupRequestVo();
+        quitVo.setHolder(1);
+        quitVo.setGroupId(requestVo.getGroupId());
+        quitVo.setUserId(userId);
+        groupService.quitGroup(quitVo);
+        return R.ok().message("群聊已解散");
     }
 }
