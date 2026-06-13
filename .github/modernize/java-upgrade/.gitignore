@@ -1,0 +1,5 @@
+mongodb/data/
+*.lock
+node_modules/
+.idea/
+.vscode/

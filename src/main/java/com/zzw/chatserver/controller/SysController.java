@@ -41,6 +41,12 @@ public class SysController {
     @Value("${fastdfs.nginx.host}")
     private String nginxHost;
 
+    @Value("${app.upload.max-size:10485760}")
+    private long maxUploadSize; // bytes, default 10MB
+
+    @Value("${app.upload.allowed-exts:jpg,jpeg,png,gif,webp,bmp,pdf,doc,docx,xls,xlsx,txt,zip,rar,mp4,mp3}")
+    private String allowedExtsProp;
+
     @Resource
     private SensitiveFilter sensitiveFilter;
 
@@ -92,6 +98,23 @@ public class SysController {
     @ResponseBody
     public R uploadFile(MultipartFile file) throws IOException, MyException {
         String originalName = file.getOriginalFilename() == null ? "file" : file.getOriginalFilename();
+        // size check
+        if (file.getSize() > maxUploadSize) {
+            return R.error().message("文件大小超过限制，最大 " + (maxUploadSize / 1024 / 1024) + "MB");
+        }
+        // extension check
+        String ext = "";
+        int dotIdx = originalName.lastIndexOf('.')
+        ;
+        if (dotIdx >= 0) ext = originalName.substring(dotIdx + 1).toLowerCase();
+        boolean okExt = false;
+        String[] parts = allowedExtsProp.split(",");
+        for (String p : parts) {
+            if (p.trim().equalsIgnoreCase(ext)) { okExt = true; break; }
+        }
+        if (!okExt && !ext.isEmpty()) {
+            return R.error().message("不支持的文件格式: " + ext);
+        }
         String filePath;
         try {
             String filePartName = FastDFSUtil.uploadFile(file);

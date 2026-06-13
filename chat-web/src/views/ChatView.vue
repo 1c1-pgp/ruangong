@@ -460,6 +460,9 @@ const historyLoading = ref(false)
 const uploadLoading = ref(false)
 const fileInputRef = ref<HTMLInputElement>()
 const uploadProgress = ref(0)
+// client-side upload limits
+const MAX_UPLOAD_SIZE = 10 * 1024 * 1024 // 10MB
+const ALLOWED_UPLOAD_EXTS = ['jpg','jpeg','png','gif','webp','bmp','pdf','doc','docx','xls','xlsx','txt','zip','rar','mp4','mp3']
 const attachments = ref<Array<{ fileRawName: string; filePath?: string; status: 'uploading' | 'done' | 'error'; preview?: string; progress?: number }>>([])
 const groupSearchQuery = ref('')
 const groupSearchResults = ref<GroupSearchItem[]>([])
@@ -697,6 +700,15 @@ async function onFileSelected(e: Event) {
   uploadLoading.value = true
   try {
     for (const file of files) {
+      const ext = (file.name.split('.').pop() || '').toLowerCase()
+      if (ext && !ALLOWED_UPLOAD_EXTS.includes(ext)) {
+        ElMessage.error(`不支持的文件格式: ${ext}`)
+        continue
+      }
+      if (file.size > MAX_UPLOAD_SIZE) {
+        ElMessage.error(`文件过大，最大允许 ${(MAX_UPLOAD_SIZE / 1024 / 1024)}MB`)
+        continue
+      }
       const att = { fileRawName: file.name, status: 'uploading' as const, preview: URL.createObjectURL(file), progress: 0 }
       attachments.value.push(att)
       try {
