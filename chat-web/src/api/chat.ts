@@ -84,7 +84,9 @@ export async function uploadChatFile(
   const form = new FormData()
   form.append('file', file)
   const { data } = await http.post<ApiEnvelope>('/chat/sys/uploadFile', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+    // do NOT set Content-Type manually — let the browser add the correct
+    // multipart/form-data; boundary header. Manually setting it breaks the
+    // boundary and causes upload to fail on the server.
     onUploadProgress: (ev: ProgressEvent) => {
       if (onProgress && ev.total) {
         const p = Math.round((ev.loaded / ev.total) * 100)
@@ -95,6 +97,36 @@ export async function uploadChatFile(
   return {
     filePath: String(data.data?.filePath ?? ''),
     fileRawName: String(data.data?.fileRawName ?? file.name),
+  }
+}
+
+// 增强版：对上传添加更明确的错误信息，便于排查问题
+export async function uploadChatFileWithDebug(
+  file: File,
+  onProgress?: (percent: number) => void,
+): Promise<{ filePath: string; fileRawName: string }> {
+  const form = new FormData()
+  form.append('file', file)
+  try {
+    const { data } = await http.post<ApiEnvelope>('/chat/sys/uploadFile', form, {
+      onUploadProgress: (ev: ProgressEvent) => {
+        if (onProgress && ev.total) {
+          const p = Math.round((ev.loaded / ev.total) * 100)
+          onProgress(p)
+        }
+      },
+    })
+    return {
+      filePath: String(data.data?.filePath ?? ''),
+      fileRawName: String(data.data?.fileRawName ?? file.name),
+    }
+  } catch (e: any) {
+    console.error('uploadChatFile failed', e)
+    // 尝试提取后端返回的可读信息
+    const status = e.response?.status
+    const respData = e.response?.data
+    const msg = respData?.message || respData || e.message || '上传失败'
+    throw new Error(`上传失败: status=${status} msg=${JSON.stringify(msg)}`)
   }
 }
 

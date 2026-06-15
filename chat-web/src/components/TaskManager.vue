@@ -300,6 +300,7 @@ function onWindowResize() {
 }
 .tm-modal { background: #fff; width:720px; max-width:95%; border-radius:8px; box-shadow:0 8px 30px rgba(0,0,0,0.3); overflow:hidden }
 .tm-header { display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid #eee }
+.tm-header h3 { color: #24313a; font-weight: 700 }
 .tm-body { padding:16px; max-height:70vh; overflow:auto }
 .row { display:flex; gap:8px; align-items:center; margin-bottom:8px }
 .row label { width:80px }

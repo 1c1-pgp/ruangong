@@ -26,7 +26,7 @@
 import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useSessionStore } from '@/stores/session'
-import { uploadChatFile, updateUserInfo } from '@/api/chat'
+import { uploadChatFile, uploadChatFileWithDebug, updateUserInfo } from '@/api/chat'
 
 const props = defineProps<{ visible: boolean; mode?: 'avatar' | 'nickname' | '' }>()
 const emit = defineEmits(['update:visible', 'updated'])
@@ -81,7 +81,7 @@ async function onFileChange(e: Event) {
   if (f.size > MAX) { ElMessage.error('图片过大，最大 10MB'); return }
   preview.value = URL.createObjectURL(f)
   try {
-    const res = await uploadChatFile(f, undefined)
+    const res = await uploadChatFileWithDebug(f, undefined)
     avatarPath.value = res.filePath
     ElMessage.success('头像上传成功')
   } catch (err: any) {
