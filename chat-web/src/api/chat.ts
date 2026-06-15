@@ -98,6 +98,10 @@ export async function uploadChatFile(
   }
 }
 
+export async function updateUserInfo(field: string, value: any, userId: string): Promise<void> {
+  await http.post<ApiEnvelope>('/chat/user/updateUserInfo', { field, value, userId })
+}
+
 export async function searchGroupHistory(params: {
   roomId: string
   type?: string

@@ -11,6 +11,11 @@ const router = createRouter({
       component: () => import('@/views/ChatView.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/profile/edit',
+      component: () => import('@/views/ProfileEdit.vue'),
+      meta: { requiresAuth: true },
+    },
   ],
 })
 

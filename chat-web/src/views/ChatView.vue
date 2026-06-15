@@ -8,9 +8,16 @@
         <span class="online-badge">{{ onlineSet.size }} 人在线</span>
       </div>
       <div class="im-header-right">
-        <div class="user-chip">
-          <el-avatar :size="32" :src="avatarUrl(session.userInfo?.photo)" />
-          <span>{{ session.userInfo?.nickname || session.userInfo?.username }}</span>
+        <div style="position:relative">
+          <div class="user-chip" style="cursor:pointer" @click.stop="showProfileMenu = !showProfileMenu">
+            <el-avatar :size="32" :src="avatarUrl(session.userInfo?.photo)" />
+            <span>{{ session.userInfo?.nickname || session.userInfo?.username }}</span>
+          </div>
+            <div v-if="showProfileMenu" class="profile-menu">
+              <div class="profile-menu-item" @click.stop="handleEditAvatar">修改头像</div>
+              <div class="profile-menu-item" @click.stop="handleEditNickname">修改昵称</div>
+              <div class="profile-menu-item" @click.stop="goToProfileEdit">打开编辑页面</div>
+            </div>
         </div>
         <el-button class="logout-btn" round @click="logout">退出</el-button>
       </div>
@@ -394,7 +401,8 @@
         </div>
         <span v-if="onlineSet.has(m.userId || '')" class="online-dot">在线</span>
       </div>
-    </el-drawer>
+</el-drawer>
+    <ProfileModal :visible="showProfileModal" :mode="profileMode" @update:visible="(v) => (showProfileModal = v)" @updated="() => { loadFriendList(); loadGroupList() }" />
   </div>
 </template>
 
@@ -412,6 +420,7 @@ import {
   getGroupInfo, addFriendByUsername,
   type FriendItem, type ChatMessage, type GroupItem, type GroupSearchItem, type ValidateMessageItem,
 } from '@/api/chat'
+import ProfileModal from '@/components/ProfileModal.vue'
 import { ensureSocket, teardownSocket } from '@/socket'
 
 const router = useRouter()
@@ -474,6 +483,17 @@ const loadMoreLoading = ref(false)
 const showGroupDrawer = ref(false)
 const groupMembers = ref<Array<{ userId?: string; username?: string; holder?: number; userInfo?: { nickname?: string; photo?: string } }>>([])
 const groupMembersLoading = ref(false)
+const showProfileModal = ref(false)
+const profileMode = ref<'avatar' | 'nickname' | ''>('')
+const showProfileMenu = ref(false)
+
+function openEditAvatar() { profileMode.value = 'avatar'; showProfileModal.value = true }
+function openEditNickname() { profileMode.value = 'nickname'; showProfileModal.value = true }
+function handleEditAvatar() { showProfileMenu.value = false; debugNotify('打开修改头像'); openEditAvatar() }
+function handleEditNickname() { showProfileMenu.value = false; debugNotify('打开修改昵称'); openEditNickname() }
+function goToProfileEdit() { showProfileMenu.value = false; router.push('/profile/edit') }
+// small feedback to help debug clicks
+function debugNotify(msg: string) { try { ElMessage.info(msg) } catch { /* ignore */ } }
 
 const pendingCount = computed(() => validateList.value.filter((i) => i.status === 0).length)
 const filteredFriends = computed(() => {
@@ -493,6 +513,8 @@ function avatarUrl(photo?: string) {
   if (photo.startsWith('/chat')) return photo
   return `/chat${photo.startsWith('/') ? '' : '/'}${photo}`
 }
+
+// replaced by openEditAvatar / openEditNickname
 
 function formatSmartTime(t: ChatMessage['time']) {
   if (!t) return ''
@@ -1087,6 +1109,15 @@ onBeforeUnmount(teardownSocket)
   padding: 4px 12px 4px 4px; border-radius: 24px;
   background: var(--im-surface-2); font-size: 14px;
 }
+
+.profile-menu {
+  position: absolute; right: 0; top: 44px;
+  background: var(--im-surface); border: 1px solid var(--im-border);
+  border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,0.08); z-index: 40;
+  min-width: 140px; overflow: hidden;
+}
+.profile-menu-item { padding: 8px 12px; cursor: pointer; font-size: 13px; }
+.profile-menu-item:hover { background: var(--im-surface-2); }
 .logout-btn { --el-button-bg-color: transparent; --el-button-border-color: var(--im-border); color: var(--im-muted); }
 
 /* Body layout */

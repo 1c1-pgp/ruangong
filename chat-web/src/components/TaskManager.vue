@@ -1,6 +1,12 @@
 <template>
   <div>
-    <button class="task-btn" @click="open = true">🗒 日常任务</button>
+    <button
+      class="task-btn"
+      :style="posStyle"
+      @pointerdown.prevent="onPointerDown"
+      @click="open = true"
+      ref="btnRef"
+    >🗒 日常任务</button>
 
     <div v-if="open" class="tm-overlay" @click.self="open = false">
       <div class="tm-modal">
@@ -59,7 +65,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 
 type Task = {
   id: string
@@ -76,6 +82,98 @@ const showForm = ref(false)
 const tasks = ref<Task[]>([])
 const form = ref<Task>({ id: '', title: '', notes: '', dueAt: null, remind: false, completed: false, notified: false })
 let checker: number | null = null
+
+const btnRef = ref<HTMLElement | null>(null)
+const pos = ref<{ x: number; y: number } | null>(null)
+const STORAGE_POS = 'task_btn_pos_v1'
+
+function loadPos() {
+  try {
+    const raw = localStorage.getItem(STORAGE_POS)
+    if (raw) pos.value = JSON.parse(raw)
+  } catch { pos.value = null }
+}
+
+function savePos() {
+  try { if (pos.value) localStorage.setItem(STORAGE_POS, JSON.stringify(pos.value)) } catch {}
+}
+
+function getDefaultPos() {
+  // default near bottom-right
+  const w = window.innerWidth
+  const h = window.innerHeight
+  const btnW = 120
+  const btnH = 44
+  return { x: Math.max(12, w - btnW - 20), y: Math.max(12, h - btnH - 24) }
+}
+
+const dragging = { active: false, startX: 0, startY: 0, originX: 0, originY: 0 }
+
+function clampToViewport(p: { x: number; y: number }) {
+  const w = window.innerWidth
+  const h = window.innerHeight
+  const btnW = btnRef.value?.offsetWidth || 120
+  const btnH = btnRef.value?.offsetHeight || 44
+  const minX = 8
+  const minY = 8
+  const maxX = Math.max(minX, w - btnW - 8)
+  const maxY = Math.max(minY, h - btnH - 8)
+  return { x: Math.min(maxX, Math.max(minX, p.x)), y: Math.min(maxY, Math.max(minY, p.y)) }
+}
+
+function avoidOverlapWithSend(p: { x: number; y: number }) {
+  const send = document.querySelector('.send-btn') as HTMLElement | null
+  const btn = btnRef.value
+  if (!send || !btn) return p
+  const sRect = send.getBoundingClientRect()
+  const bRect = { left: p.x, top: p.y, right: p.x + (btn.offsetWidth || 120), bottom: p.y + (btn.offsetHeight || 44) }
+  // if overlap, move the task button above the send button
+  const intersect = !(bRect.right < sRect.left || bRect.left > sRect.right || bRect.bottom < sRect.top || bRect.top > sRect.bottom)
+  if (intersect) {
+    const newY = Math.max(8, sRect.top - (btn.offsetHeight || 44) - 8)
+    return { x: p.x, y: newY }
+  }
+  return p
+}
+
+const posStyle = computed(() => {
+  const p = pos.value || getDefaultPos()
+  return { position: 'fixed', left: p.x + 'px', top: p.y + 'px', zIndex: 3000 }
+})
+
+function onPointerDown(e: PointerEvent) {
+  // start dragging
+  (e.target as HTMLElement).setPointerCapture?.(e.pointerId)
+  dragging.active = true
+  dragging.startX = e.clientX
+  dragging.startY = e.clientY
+  const cur = pos.value || getDefaultPos()
+  dragging.originX = cur.x
+  dragging.originY = cur.y
+  window.addEventListener('pointermove', onPointerMove)
+  window.addEventListener('pointerup', onPointerUp)
+}
+
+function onPointerMove(e: PointerEvent) {
+  if (!dragging.active) return
+  const dx = e.clientX - dragging.startX
+  const dy = e.clientY - dragging.startY
+  let candidate = { x: dragging.originX + dx, y: dragging.originY + dy }
+  candidate = clampToViewport(candidate)
+  pos.value = candidate
+}
+
+function onPointerUp(e: PointerEvent) {
+  if (!dragging.active) return
+  dragging.active = false
+  window.removeEventListener('pointermove', onPointerMove)
+  window.removeEventListener('pointerup', onPointerUp)
+  // avoid overlap and persist
+  if (pos.value) {
+    pos.value = avoidOverlapWithSend(pos.value)
+    savePos()
+  }
+}
 
 const STORAGE_KEY = 'task_manager_tasks_v1'
 
@@ -165,30 +263,38 @@ function notifyTask(t: Task) {
 
 onMounted(() => {
   load()
+  loadPos()
   if (window.Notification && Notification.permission !== 'granted') {
     try { Notification.requestPermission().catch(() => {}) } catch { }
   }
   checker = window.setInterval(checkReminders, 30 * 1000)
+  window.addEventListener('resize', onWindowResize)
 })
 
 onBeforeUnmount(() => {
   if (checker) clearInterval(checker)
+  window.removeEventListener('resize', onWindowResize)
 })
+
+function onWindowResize() {
+  if (!pos.value) return
+  pos.value = clampToViewport(pos.value)
+  savePos()
+}
 </script>
 
 <style scoped>
 .task-btn {
-  position: fixed;
-  right: 20px;
-  bottom: 24px;
   background: #409eff;
   color: white;
   border: none;
   padding: 10px 14px;
   border-radius: 8px;
-  cursor: pointer;
+  cursor: grab;
   box-shadow: 0 6px 18px rgba(64,158,255,0.24);
+  user-select: none;
 }
+.task-btn:active { cursor: grabbing }
 .tm-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center; z-index:2000;
 }
